@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
@@ -217,6 +218,70 @@ class LedgerEngineTest {
                     ledgerEngine.creditWallet("user-abc", "USD", key, 100L, "re-credit")
             );
             verifyNoInteractions(accountRepository, ledgerEntryRepository);
+        }
+    }
+
+    @Nested
+    @DisplayName("account creation race recovery")
+    class AccountRaceRecovery {
+
+        @Test
+        @DisplayName("getOrCreateAccount recovers when a concurrent transaction creates the " +
+                "system account first")
+        void getOrCreateAccountRecoversFromConcurrentCreation() {
+            // Given: SYSTEM_FUNDING doesn't exist on our first read, but by the time our
+            // insert fails on the unique constraint, another transaction has already created it.
+            String userId = "user-abc";
+            String currency = "USD";
+            String key = "key-123";
+
+            Account userAccount = createAccount(1L, userId, currency);
+            Account systemFundingAccount = createAccount(2L, SystemAccount.SYSTEM_FUNDING.getUserId(), currency);
+
+            when(idempotencyKeyRepository.findByIdempotencyKey(key)).thenReturn(Optional.empty());
+            when(accountRepository.findByUserIdAndCurrencyCodeForUpdate(userId, currency))
+                    .thenReturn(Optional.of(userAccount));
+            when(accountRepository.findByUserIdAndCurrencyCode(SystemAccount.SYSTEM_FUNDING.getUserId(), currency))
+                    .thenReturn(Optional.empty(), Optional.of(systemFundingAccount));
+            when(accountRepository.save(any(Account.class)))
+                    .thenThrow(new DataIntegrityViolationException("uq_accounts_user_currency"));
+
+            // When
+            ledgerEngine.creditWallet(userId, currency, key, 500L, "deposit");
+
+            // Then: re-fetched the row the other transaction created, and proceeded normally.
+            verify(accountRepository, times(2))
+                    .findByUserIdAndCurrencyCode(SystemAccount.SYSTEM_FUNDING.getUserId(), currency);
+            verify(ledgerEntryRepository).save(argThat(entry -> entry.getAccount() == systemFundingAccount));
+        }
+
+        @Test
+        @DisplayName("getOrCreateAndLockAccount recovers when a concurrent transaction creates " +
+                "the user account first")
+        void getOrCreateAndLockAccountRecoversFromConcurrentCreation() {
+            // Given: the user's account doesn't exist on our first locked read, but by the
+            // time our insert fails on the unique constraint, another transaction created it.
+            String userId = "user-abc";
+            String currency = "USD";
+            String key = "key-123";
+
+            Account userAccount = createAccount(1L, userId, currency);
+            Account systemFundingAccount = createAccount(2L, SystemAccount.SYSTEM_FUNDING.getUserId(), currency);
+
+            when(idempotencyKeyRepository.findByIdempotencyKey(key)).thenReturn(Optional.empty());
+            when(accountRepository.findByUserIdAndCurrencyCodeForUpdate(userId, currency))
+                    .thenReturn(Optional.empty(), Optional.of(userAccount));
+            when(accountRepository.findByUserIdAndCurrencyCode(SystemAccount.SYSTEM_FUNDING.getUserId(), currency))
+                    .thenReturn(Optional.of(systemFundingAccount));
+            when(accountRepository.save(any(Account.class)))
+                    .thenThrow(new DataIntegrityViolationException("uq_accounts_user_currency"));
+
+            // When
+            ledgerEngine.creditWallet(userId, currency, key, 500L, "deposit");
+
+            // Then: re-fetched (WITH the lock) the row the other transaction created.
+            verify(accountRepository, times(2)).findByUserIdAndCurrencyCodeForUpdate(userId, currency);
+            verify(ledgerEntryRepository).save(argThat(entry -> entry.getAccount() == userAccount));
         }
     }
 
