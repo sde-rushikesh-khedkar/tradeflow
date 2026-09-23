@@ -45,8 +45,9 @@ public class IdempotencyKey {
     @Column(name = "idempotency_key", nullable = false, length = 64)
     private String idempotencyKey;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "operation", nullable = false, length = 64)
-    private String operation;
+    private LedgerOperation operation;
 
     @Column(name = "response_body", nullable = false, columnDefinition = "json")
     private String responseBody;
@@ -67,10 +68,10 @@ public class IdempotencyKey {
      * Creates a new idempotency record for a completed operation.
      *
      * @param idempotencyKey  UUID from the client request; must not be null or blank
-     * @param operation       name of the operation (e.g. "RESERVE_FUNDS"); must not be null
+     * @param operation       the operation this key was recorded for; must not be null
      * @param responseBody    JSON-serialised original response; must be valid JSON
      */
-    public IdempotencyKey(String idempotencyKey, String operation, String responseBody) {
+    public IdempotencyKey(String idempotencyKey, LedgerOperation operation, String responseBody) {
         this.idempotencyKey = idempotencyKey;
         this.operation = operation;
         this.responseBody = responseBody;
@@ -84,7 +85,7 @@ public class IdempotencyKey {
         return this.idempotencyKey;
     }
 
-    public String getOperation() {
+    public LedgerOperation getOperation() {
         return this.operation;
     }
 

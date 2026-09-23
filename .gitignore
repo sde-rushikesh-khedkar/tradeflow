@@ -59,4 +59,7 @@ docker-compose.override.yml
 k8s/local/
 k8s/secrets/
 
+# ── Personal Developing Methods ──────────────────────────────────────────────
 TRADEFLOW_SKILL.md
+CLAUDE.md
+AI_INTEGRATION.md
