@@ -24,11 +24,11 @@ class IdempotencyKeyTest {
         @DisplayName("sets all fields correctly when constructed with valid arguments")
         void setsAllFieldsCorrectlyWhenConstructedWithValidArguments() {
             IdempotencyKey record = new IdempotencyKey(
-                "uuid-abc-123", "RESERVE_FUNDS", "{\"status\":\"success\"}");
+                "uuid-abc-123", LedgerOperation.RESERVE_FUNDS, "{\"status\":\"success\"}");
 
             assertAll(
                 () -> assertEquals("uuid-abc-123",          record.getIdempotencyKey()),
-                () -> assertEquals("RESERVE_FUNDS",          record.getOperation()),
+                () -> assertEquals(LedgerOperation.RESERVE_FUNDS, record.getOperation()),
                 () -> assertEquals("{\"status\":\"success\"}", record.getResponseBody())
             );
         }
@@ -36,7 +36,7 @@ class IdempotencyKeyTest {
         @Test
         @DisplayName("returns null id before persistence")
         void returnsNullIdBeforePersistence() {
-            IdempotencyKey record = new IdempotencyKey("uuid-abc-123", "RESERVE_FUNDS", "{}");
+            IdempotencyKey record = new IdempotencyKey("uuid-abc-123", LedgerOperation.RESERVE_FUNDS, "{}");
 
             assertNull(record.getId());
         }
@@ -44,7 +44,7 @@ class IdempotencyKeyTest {
         @Test
         @DisplayName("returns null createdAt before persistence")
         void returnsNullCreatedAtBeforePersistence() {
-            IdempotencyKey record = new IdempotencyKey("uuid-abc-123", "RESERVE_FUNDS", "{}");
+            IdempotencyKey record = new IdempotencyKey("uuid-abc-123", LedgerOperation.RESERVE_FUNDS, "{}");
 
             assertNull(record.getCreatedAt());
         }

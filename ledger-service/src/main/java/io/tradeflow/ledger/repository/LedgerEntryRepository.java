@@ -55,8 +55,69 @@ public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, Long> 
             SELECT COALESCE(SUM(amount_cents), 0)
             FROM ledger_entries
             WHERE account_id = :accountId
-              AND entry_type = :#{#entryType.name()}
+                AND entry_type = :#{#entryType.name()}
             """, nativeQuery = true)
     long sumAmountCentsByAccountIdAndEntryType(@Param("accountId") Long accountId,
                                                @Param("entryType") EntryType entryType);
+
+     /**
+      * Sums all reserved cents for a user's account that are currently sitting in escrow.
+      *
+      * <p>An active reservation is defined as a DEBIT on the user's account whose
+      * referenceId (idempotency key) is currently credited in SYSTEM_ESCROW but has
+      * NOT yet been debited (captured or released) from SYSTEM_ESCROW.
+      */
+    @Query(value = """ 
+            SELECT COALESCE(SUM(le.amount_cents), 0)
+            FROM ledger_entries le
+            WHERE le.account_id = :userAccountId
+                --  1. Must be a debit on the user's account (indicating money was moved to escrow)
+                AND le.entry_type = 'DEBIT'
+                --  2. There must be a matching credit in escrow
+                AND EXISTS(
+                    SELECT 1 FROM ledger_entries esc_in
+                    WHERE esc_in.reference_id = le.reference_id
+                    AND esc_in.account_id = :escrowAccountId
+                    AND esc_in.entry_type = 'CREDIT'
+                )
+                --  3. There must NOT be a matching debit in escrow (meaning it hasn't been captured/released yet)
+                AND NOT EXISTS(
+                    SELECT 1 FROM ledger_entries esc_out
+                    WHERE esc_out.reference_id = le.reference_id
+                    AND esc_out.account_id = :escrowAccountId
+                    AND esc_out.entry_type = 'DEBIT'
+                );
+            """, nativeQuery = true)
+    long sumReservedCentsByAccountIdAndEscrowAccountId(@Param("userAccountId") Long userAccountId,
+                                                       @Param("escrowAccountId") Long escrowAccountId);
+
+    /**
+     * Sums entry amounts for one specific reservation event, scoped to a single
+     * account and entry direction.
+     *
+     * <p>Used by release/capture flows to determine the outstanding escrow amount
+     * for a given {@code reference_id} — {@code SUM(CREDIT) - SUM(DEBIT)} on the
+     * escrow account for that reference_id. A result of zero means the reservation
+     * was never created for that id, or has already been fully released/captured.
+     *
+     * <p>Unlike {@link #sumAmountCentsByAccountIdAndEntryType}, which aggregates
+     * across ALL reservations for an account, this narrows to one reservation
+     * event so a release call cannot accidentally act on unrelated escrow entries.
+     *
+     * @param referenceId  the idempotency key of the original reserving operation; must not be null
+     * @param accountId    the primary key of the account (typically SYSTEM_ESCROW); must not be null
+     * @param entryType    DEBIT or CREDIT; must not be null
+     * @return             sum of {@code amount_cents} for the given reference_id, account, and
+     *                     direction, or 0 if no matching entries exist
+     */
+    @Query(value = """
+            SELECT COALESCE(SUM(amount_cents), 0)
+            FROM ledger_entries
+            WHERE reference_id = :referenceId
+                AND account_id = :accountId
+                AND entry_type = :#{#entryType.name()}
+            """, nativeQuery = true)
+    long sumAmountCentsByReferenceIdAndAccountIdAndEntryType(@Param("referenceId") String referenceId,
+                                                             @Param("accountId") Long accountId,
+                                                             @Param("entryType") EntryType entryType);
 }

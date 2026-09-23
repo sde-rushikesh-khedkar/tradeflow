@@ -76,6 +76,21 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Maps ReservationNotFoundException to 404 Not Found.
+     *
+     * <p>404 is correct here — the reservation identified by the client either
+     * never existed or has already been released/captured. Nothing left to act on.
+     */
+    @ExceptionHandler(ReservationNotFoundException.class)
+    public ProblemDetail handleReservationNotFound(ReservationNotFoundException ex) {
+        ProblemDetail pd = ProblemDetail
+                .forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        pd.setTitle("Reservation Not Found");
+        pd.setProperty("reservationId", ex.getReservationId());
+        return pd;
+    }
+
+    /**
      * Maps Bean Validation failures to 400 Bad Request.
      *
      * <p>Collects all field errors into a list so the client receives every
