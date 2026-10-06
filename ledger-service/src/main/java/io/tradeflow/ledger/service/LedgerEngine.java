@@ -414,10 +414,12 @@ public class LedgerEngine {
      *                               which reservation to finalize; must not be null
      * @param orderId                the order this capture is for; used for the ledger
      *                               entry descriptions, not for any business decision
+     * @return                       the amount captured, in cents — read from the ledger,
+     *                               not supplied by the caller
      * @throws ReservationNotFoundException if no outstanding hold exists for originalReservationId
      */
     @Transactional(isolation = Isolation.REPEATABLE_READ)
-    public void captureFunds(String userId, String currencyCode, String captureIdempotencyKey,
+    public long captureFunds(String userId, String currencyCode, String captureIdempotencyKey,
                              String originalReservationId, String orderId) {
 
         //  1. Idempotency check for this capture request.
@@ -427,9 +429,17 @@ public class LedgerEngine {
             if (record.getOperation() != LedgerOperation.CAPTURE_FUNDS) {
                 throw new DuplicateIdempotencyKeyException(captureIdempotencyKey);
             }
-            log.info("Duplicate captureFunds request detected for key {}. Returning cached success.",
-                    captureIdempotencyKey);
-            return;
+            try {
+                JsonNode responseJson = objectMapper.readTree(record.getResponseBody());
+                long cachedCapturedCents = responseJson.get("capturedCents").asLong();
+                log.info("Duplicate captureFunds request detected for key {}. Returning cached capturedCents: {}.",
+                        captureIdempotencyKey, cachedCapturedCents
+                );
+                return cachedCapturedCents;
+            } catch (Exception e) {
+                log.error("Failed to parse cached response body for idempotency key: {}", captureIdempotencyKey, e);
+                throw new DuplicateIdempotencyKeyException(captureIdempotencyKey);
+            }
         }
 
         //  2. Lock the user account. captureFunds never reads or writes the user's own
@@ -474,14 +484,17 @@ public class LedgerEngine {
         ledgerEntryRepository.save(ledgerEntryTypeDebit);
         ledgerEntryRepository.save(ledgerEntryTypeCredit);
 
-        //  5. Save the idempotency record for this capture request.
+        //  5. Save the idempotency record, including the captured amount so a
+        //  duplicate request can echo it back without re-deriving it from the ledger.
         IdempotencyKey idempotencyEntry = new IdempotencyKey(
                 captureIdempotencyKey,
                 LedgerOperation.CAPTURE_FUNDS,
-                "{\"success\": true}"
+                "{\"success\": true, \"capturedCents\": " + outstandingCents + "}"
         );
 
         idempotencyKeyRepository.save(idempotencyEntry);
+
+        return outstandingCents;
     }
 
     /**
