@@ -1,23 +1,16 @@
 // TradeFlow — LedgerService gRPC Contract
-// Version: 1.0
-//
-// This file defines the ONLY synchronous communication contract between
-// order-service (client) and ledger-service (server).
-//
-// WHY gRPC for this link:
-//   Before confirming an order to a customer, the system must verify
-//   sufficient wallet funds. This check must be synchronous (the client
-//   waits for the result) and must have a strict, versioned schema.
-//   REST over HTTP/1.1 would work but adds JSON serialisation overhead
-//   and allows schema drift. Protobuf binary encoding is ~5x smaller
-//   and ~6x faster to parse than JSON, and the .proto file IS the
-//   schema contract — it cannot drift without a compilation failure.
-//
-// Naming convention:
-//   All RPC names use imperative verbs (ReserveFunds, not FundsReserved).
-//   Message names match the RPC name with Request/Response suffix.
-//   Field names use snake_case per Protobuf convention (generated Java
-//   getters are automatically converted to camelCase).
+// Version: 1.1
+
+/**
+ * Synchronous contract between order-service (client) and ledger-service (server).
+ *
+ * <p>Why gRPC: confirming an order requires a synchronous wallet-funds check.
+ * Protobuf is a versioned binary schema — a field change that breaks the
+ * contract fails at compile time on both services, not at runtime.
+ *
+ * <p>Naming: RPC names are imperative verbs (ReserveFunds, not FundsReserved).
+ * Message names match the RPC name with Request/Response suffix.
+ */
 
 syntax = "proto3";
 
@@ -25,100 +18,92 @@ package io.tradeflow.proto.ledger;
 
 option java_package         = "io.tradeflow.proto.ledger";
 option java_outer_classname = "LedgerProto";
-
-// java_multiple_files = true — generates one .java file per message class
-// instead of nesting all classes inside LedgerProto.java.
-// This keeps generated code navigable and matches our package structure.
 option java_multiple_files  = true;
-
-// ── LedgerService ───────────────────────────────────────────────────────────
-//
-// The gRPC service exposed by ledger-service.
-// All three RPCs are unary (single request → single response).
-// Streaming RPCs are not used here — they add complexity without benefit
-// for these point-in-time financial queries.
 
 service LedgerService {
 
-    // ReserveFunds — places a hold on the user's wallet balance.
-    // Called by order-service BEFORE persisting an order as CONFIRMED.
-    // Uses an idempotency key so a retry after network timeout does not
-    // double-reserve funds.
+    /**
+     * Holds funds in escrow against an order. Called before an order is
+     * confirmed. Idempotent — a retry with the same idempotency_key returns
+     * the original reservation instead of reserving twice.
+     */
     rpc ReserveFunds (ReserveFundsRequest) returns (ReserveFundsResponse);
 
-    // DebitWallet — finalises the charge after an order is confirmed.
-    // Called by ledger-service internally when processing an OrderCreated
-    // Kafka event. Converts a reservation into a permanent debit entry.
-    rpc DebitWallet (DebitWalletRequest) returns (DebitWalletResponse);
+    /**
+     * Finalizes a reservation: moves escrow funds to revenue. Called
+     * once an order is confirmed. The captured amount is read from the
+     * ledger, not taken from the request, so a bad request can't capture
+     * the wrong sum.
+     */
+    rpc CaptureFunds (CaptureFundsRequest) returns (CaptureFundsResponse);
 
-    // GetBalance — returns the current available and reserved balance.
-    // Called by gateway-service (proxied as GET /api/v1/wallet/balance).
-    // Read-only — no state mutation.
+    /**
+     * Returns available and reserved balance for a user. Read-only.
+     */
     rpc GetBalance (GetBalanceRequest) returns (GetBalanceResponse);
 
 }
 
 // ── ReserveFunds ────────────────────────────────────────────────────────────
 
+/**
+ * Request to hold funds in escrow.
+ */
 message ReserveFundsRequest {
-    // idempotency_key — client-generated UUID.
-    // The ledger stores this key with a UNIQUE constraint.
-    // On duplicate request (e.g. retry after timeout), the ledger returns
-    // the original response without double-reserving. Exactly-once semantics
-    // enforced at the storage layer, not the application layer.
-    string idempotency_key  = 1;
-
+    string idempotency_key  = 1;  // client-generated UUID; unique constraint enforces exactly-once
     string user_id          = 2;
     string order_id         = 3;
-
-    // amount_cents — monetary values are ALWAYS stored as integer cents,
-    // never as floating-point. Floating-point arithmetic on money causes
-    // rounding errors that accumulate across ledger entries.
-    int64  amount_cents     = 4;
-
-    string currency         = 5;  // ISO 4217 — e.g. "INR", "USD"
+    int64  amount_cents     = 4;  // always integer cents — never a float
+    string currency         = 5;  // ISO 4217, e.g. "USD"
 }
 
+/**
+ * Result of a reservation attempt.
+ */
 message ReserveFundsResponse {
     bool   success          = 1;
-    string reservation_id   = 2;  // UUID of the reservation ledger entry
-    string failure_reason   = 3;  // populated only when success = false
+    string reservation_id   = 2;  // pass to CaptureFunds to finalize this hold
+    string failure_reason   = 3;  // set only when success = false
 }
 
-// ── DebitWallet ─────────────────────────────────────────────────────────────
+// ── CaptureFunds ────────────────────────────────────────────────────────────
 
-message DebitWalletRequest {
+/**
+ * Request to finalize an existing reservation.
+ */
+message CaptureFundsRequest {
     string idempotency_key  = 1;
     string user_id          = 2;
     string order_id         = 3;
-    string reservation_id   = 4;  // links to the prior ReserveFunds call
-    int64  amount_cents     = 5;
-    string currency         = 6;
+    string reservation_id   = 4;  // from ReserveFundsResponse
+    string currency         = 5;
 }
 
-message DebitWalletResponse {
-    bool   success              = 1;
-    int64  new_balance_cents    = 2;  // balance after debit, for audit logging
-    string failure_reason       = 3;
+/**
+ * Result of a capture attempt.
+ */
+message CaptureFundsResponse {
+    bool   success           = 1;
+    int64  captured_cents    = 2;  // amount captured, read from the ledger — for audit logging
+    string failure_reason    = 3;  // set only when success = false
 }
 
 // ── GetBalance ──────────────────────────────────────────────────────────────
 
+/**
+ * Request for a user's current balance.
+ */
 message GetBalanceRequest {
     string user_id      = 1;
     string currency     = 2;
 }
 
+/**
+ * A user's current balance, split by availability.
+ */
 message GetBalanceResponse {
     string user_id                  = 1;
-
-    // available_balance_cents — funds the user can spend right now.
-    // = total balance − reserved balance.
-    int64  available_balance_cents  = 2;
-
-    // reserved_balance_cents — funds held pending order confirmation.
-    // Cannot be spent until reservation is released or converted to debit.
-    int64  reserved_balance_cents   = 3;
-
+    int64  available_balance_cents  = 2;  // spendable now = total − reserved
+    int64  reserved_balance_cents   = 3;  // held pending order confirmation
     string currency                 = 4;
 }

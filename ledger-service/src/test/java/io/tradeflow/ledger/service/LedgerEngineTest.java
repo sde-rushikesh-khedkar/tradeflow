@@ -631,9 +631,10 @@ class LedgerEngineTest {
                     originalReservationId, 2L, EntryType.DEBIT)).thenReturn(0L);
 
             // When
-            ledgerEngine.captureFunds(userId, currency, captureKey, originalReservationId, "order-999");
+            long capturedCents = ledgerEngine.captureFunds(userId, currency, captureKey, originalReservationId, "order-999");
 
             // Then
+            assertEquals(1000L, capturedCents);
             // Critical: captureFunds never reads or writes the user's balance, but must still
             // acquire this lock — it's the same row releaseFunds locks, and is what prevents
             // a concurrent releaseFunds/captureFunds race on the same reservation from both
@@ -656,7 +657,7 @@ class LedgerEngineTest {
             verify(idempotencyKeyRepository).save(argThat(idempotency ->
                     captureKey.equals(idempotency.getIdempotencyKey()) &&
                     idempotency.getOperation() == LedgerOperation.CAPTURE_FUNDS &&
-                    "{\"success\": true}".equals(idempotency.getResponseBody())
+                    "{\"success\": true, \"capturedCents\": 1000}".equals(idempotency.getResponseBody())
             ));
         }
 
@@ -665,13 +666,15 @@ class LedgerEngineTest {
         void returnsEarlyOnDuplicateRequest() {
             // Given
             String captureKey = "capture-key-1";
-            IdempotencyKey record = new IdempotencyKey(captureKey, LedgerOperation.CAPTURE_FUNDS, "{\"success\": true}");
+            IdempotencyKey record = new IdempotencyKey(captureKey, LedgerOperation.CAPTURE_FUNDS,
+                    "{\"success\": true, \"capturedCents\": 1000}");
             when(idempotencyKeyRepository.findByIdempotencyKey(captureKey)).thenReturn(Optional.of(record));
 
             // When
-            ledgerEngine.captureFunds("user-abc", "USD", captureKey, "reserve-key-1", "order-999");
+            long capturedCents = ledgerEngine.captureFunds("user-abc", "USD", captureKey, "reserve-key-1", "order-999");
 
             // Then
+            assertEquals(1000L, capturedCents);
             verifyNoInteractions(accountRepository, ledgerEntryRepository);
         }
 
