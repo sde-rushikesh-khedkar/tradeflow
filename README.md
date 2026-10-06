@@ -12,18 +12,26 @@ Spring Boot 3, gRPC, Kafka, and MySQL.
 
 ## What it is
 
-TradeFlow is a multi-service backend system that handles the full lifecycle of an
-e-commerce transaction — from order placement through fund reservation, double-entry
-ledger settlement, and real-time wallet event streaming to connected clients.
+A multi-service backend handling a full e-commerce transaction lifecycle — order
+placement, fund reservation, double-entry ledger settlement, real-time wallet events.
 
-The system is decomposed into three bounded contexts: a financial ledger that owns
-all monetary state, an order service that manages the order lifecycle, and a reactive
-API gateway that handles authentication, rate limiting, and WebSocket push. Services
-communicate synchronously over gRPC (with Protobuf contracts), asynchronously over
-Kafka, and are secured end-to-end with RSA-signed JWTs.
+Three bounded contexts: 
 
-The project is built phase by phase. Every component is fully tested with
-Testcontainers integration tests and documented before the next phase begins.
+- `ledger-service` owns all monetary state
+- `order-service` owns the order lifecycle
+- `gateway-service` handles auth, rate limiting, and WebSocket push. 
+- Services talk gRPC (Protobuf) internally, Kafka for events, RSA-signed JWTs
+end-to-end.
+
+---
+
+## Engineering Highlights
+
+- **Double-entry ledger** : balances derived from immutable `ledger_entries`, never a mutable balance column
+- **Idempotent money movement** : unique idempotency keys make retried requests safe, not double-charged
+- **gRPC internal, REST/WebSocket external** : right transport for the right boundary
+- **RFC 7807 errors** : one error shape (`ProblemDetail`) across every REST endpoint
+- **Centralized error mapping** : one domain exception hierarchy maps to both RFC 7807 (REST) and gRPC `Status` (`@GrpcAdvice`)
 
 ---
 
@@ -51,14 +59,19 @@ flowchart TD
     GW -->|spans| Zipkin
 ```
 
-**Communication model:** synchronous over gRPC (HTTP/2 + Protobuf) for fund reservation
+**Communication model:** 
+
+- Synchronous over gRPC (HTTP/2 + Protobuf) for fund reservation
 between order-service and ledger-service — a point-in-time financial check that must block
-until complete. Asynchronous over Kafka for all event-driven flows — order confirmation,
+until complete. 
+- Asynchronous over Kafka for all event-driven flows — order confirmation,
 wallet settlement, and WebSocket push.
 
 **Data ownership:** strict. No service reads from another service's database schema.
-ledger-service owns `tradeflow_ledger`. order-service owns `tradeflow_orders`.
-gateway-service has no MySQL — it is a stateless routing layer backed by Redis.
+
+- ledger-service owns `tradeflow_ledger`
+- order-service owns `tradeflow_orders`.
+- gateway-service has no MySQL — it is a stateless routing layer backed by Redis.
 
 ---
 
@@ -78,7 +91,7 @@ gateway-service has no MySQL — it is a stateless routing layer backed by Redis
 **Prerequisites:** Java 21+, Maven 3.9+, Docker
 
 ```bash
-git clone https://github.com/DominiK037/tradeflow.git
+git clone https://github.com/sde-rushikesh-khedkar/tradeflow.git
 cd tradeflow
 ```
 
