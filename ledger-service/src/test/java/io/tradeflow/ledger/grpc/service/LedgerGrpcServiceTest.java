@@ -3,6 +3,7 @@ package io.tradeflow.ledger.grpc.service;
 import io.grpc.stub.StreamObserver;
 import io.tradeflow.ledger.exception.InsufficientFundsException;
 import io.tradeflow.ledger.exception.ReservationNotFoundException;
+import io.tradeflow.ledger.grpc.exception.LedgerGrpcExceptionHandler;
 import io.tradeflow.ledger.model.AccountBalance;
 import io.tradeflow.ledger.service.LedgerEngine;
 import io.tradeflow.proto.ledger.CaptureFundsRequest;

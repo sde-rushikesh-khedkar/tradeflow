@@ -8,6 +8,9 @@ import io.tradeflow.ledger.exception.ReservationNotFoundException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.AuthenticationException;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -70,6 +73,42 @@ class LedgerGrpcExceptionHandlerTest {
 
             assertAll(
                     () -> assertEquals(Status.Code.ALREADY_EXISTS, result.getStatus().getCode()),
+                    () -> assertEquals(ex.getMessage(), result.getStatus().getDescription())
+            );
+        }
+    }
+
+    @Nested
+    @DisplayName("handleAuthentication()")
+    class HandleAuthentication {
+
+        @Test
+        @DisplayName("maps to UNAUTHENTICATED with the exception message")
+        void mapsToUnauthenticated() {
+            AuthenticationException ex = new BadCredentialsException("invalid token");
+
+            StatusRuntimeException result = handler.handleAuthentication(ex);
+
+            assertAll(
+                    () -> assertEquals(Status.Code.UNAUTHENTICATED, result.getStatus().getCode()),
+                    () -> assertEquals(ex.getMessage(), result.getStatus().getDescription())
+            );
+        }
+    }
+
+    @Nested
+    @DisplayName("handleAccessDenied()")
+    class HandleAccessDenied {
+
+        @Test
+        @DisplayName("maps to PERMISSION_DENIED with the exception message")
+        void mapsToPermissionDenied() {
+            AccessDeniedException ex = new AccessDeniedException("insufficient role");
+
+            StatusRuntimeException result = handler.handleAccessDenied(ex);
+
+            assertAll(
+                    () -> assertEquals(Status.Code.PERMISSION_DENIED, result.getStatus().getCode()),
                     () -> assertEquals(ex.getMessage(), result.getStatus().getDescription())
             );
         }
