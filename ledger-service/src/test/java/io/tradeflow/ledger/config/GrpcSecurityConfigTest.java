@@ -4,7 +4,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -12,7 +11,6 @@ import org.springframework.security.oauth2.server.resource.InvalidBearerTokenExc
 import org.springframework.security.oauth2.server.resource.authentication.BearerTokenAuthenticationToken;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 
-import java.security.interfaces.RSAPublicKey;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -31,9 +29,8 @@ class GrpcSecurityConfigTest {
     private AuthenticationManager authenticationManager;
 
     @BeforeEach
-    void setUp() throws Exception {
-        RSAPublicKey rsaPublicKey = appConfig.rsaPublicKey(new ClassPathResource("keys/public.pem"));
-        JwtDecoder jwtDecoder = appConfig.jwtDecoder(rsaPublicKey);
+    void setUp() {
+        JwtDecoder jwtDecoder = appConfig.jwtDecoder(JwtTestSupport.publicKey());
         JwtAuthenticationConverter converter = appConfig.jwtAuthenticationConverter();
         authenticationManager = grpcSecurityConfig.grpcAuthenticationManager(jwtDecoder, converter);
     }

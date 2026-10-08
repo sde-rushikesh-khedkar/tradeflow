@@ -29,9 +29,21 @@ class AppConfigTest {
     private JwtDecoder jwtDecoder;
 
     @BeforeEach
-    void setUp() throws Exception {
-        RSAPublicKey rsaPublicKey = appConfig.rsaPublicKey(new ClassPathResource("keys/public.pem"));
-        jwtDecoder = appConfig.jwtDecoder(rsaPublicKey);
+    void setUp() {
+        jwtDecoder = appConfig.jwtDecoder(JwtTestSupport.publicKey());
+    }
+
+    @Nested
+    @DisplayName("rsaPublicKey()")
+    class RsaPublicKeyTests {
+
+        @Test
+        @DisplayName("loads the committed public.pem from classpath")
+        void loadsCommittedPemFromClasspath() throws Exception {
+            RSAPublicKey rsaPublicKey = appConfig.rsaPublicKey(new ClassPathResource("keys/public.pem"));
+
+            assertEquals("RSA", rsaPublicKey.getAlgorithm());
+        }
     }
 
     @Nested
