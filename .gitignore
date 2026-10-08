@@ -35,6 +35,7 @@ Thumbs.db
 .env
 .env.*
 *.pem
+!ledger-service/src/main/resources/keys/public.pem
 *.key
 *.p12
 *.jks

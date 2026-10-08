@@ -12,6 +12,7 @@ import io.tradeflow.proto.ledger.LedgerServiceGrpc;
 import io.tradeflow.proto.ledger.ReserveFundsRequest;
 import io.tradeflow.proto.ledger.ReserveFundsResponse;
 import net.devh.boot.grpc.server.service.GrpcService;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 /**
  * gRPC server implementation of the LedgerService contract defined in ledger.proto.
@@ -24,6 +25,9 @@ import net.devh.boot.grpc.server.service.GrpcService;
  * {@link LedgerGrpcExceptionHandler}, which converts them to a {@code StatusRuntimeException}
  * via {@code responseObserver.onError} — mirrors {@code GlobalExceptionHandler}'s REST
  * {@code ProblemDetail} pattern.
+ *
+ * <p><b>Authorization:</b> write ops (reserve/capture) need MERCHANT/ADMIN; getBalance
+ * just needs any authenticated caller. Enforced via @PreAuthorize.
  *
  * <p><b>Thread safety:</b> stateless singleton — safe for concurrent use.
  *
@@ -46,6 +50,7 @@ public class LedgerGrpcService extends LedgerServiceGrpc.LedgerServiceImplBase {
      * @param responseObserver carries the reservation id back to the caller
      */
     @Override
+    @PreAuthorize("hasAnyRole('MERCHANT', 'ADMIN')")
     public void reserveFunds(ReserveFundsRequest request, StreamObserver<ReserveFundsResponse> responseObserver) {
         String reservationId = ledgerEngine.reserveFunds(
                 request.getUserId(),
@@ -71,6 +76,7 @@ public class LedgerGrpcService extends LedgerServiceGrpc.LedgerServiceImplBase {
      * @param responseObserver carries the captured amount back to the caller
      */
     @Override
+    @PreAuthorize("hasAnyRole('MERCHANT', 'ADMIN')")
     public void captureFunds(CaptureFundsRequest request, StreamObserver<CaptureFundsResponse> responseObserver) {
         long capturedCents = ledgerEngine.captureFunds(
                 request.getUserId(),
@@ -96,6 +102,7 @@ public class LedgerGrpcService extends LedgerServiceGrpc.LedgerServiceImplBase {
      * @param responseObserver carries the balance back to the caller
      */
     @Override
+    @PreAuthorize("isAuthenticated()")
     public void getBalance(GetBalanceRequest request, StreamObserver<GetBalanceResponse> responseObserver) {
         AccountBalance balance = ledgerEngine.getAccountBalance(request.getUserId(), request.getCurrency());
 
