@@ -8,6 +8,8 @@ import io.tradeflow.ledger.exception.ReservationNotFoundException;
 import io.tradeflow.ledger.grpc.service.LedgerGrpcService;
 import net.devh.boot.grpc.server.advice.GrpcAdvice;
 import net.devh.boot.grpc.server.advice.GrpcExceptionHandler;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 
 /**
  * Centralised gRPC error handler for the Ledger Service.
@@ -59,6 +61,25 @@ public class LedgerGrpcExceptionHandler {
     @GrpcExceptionHandler(DuplicateIdempotencyKeyException.class)
     public StatusRuntimeException handleDuplicateIdempotencyKey(DuplicateIdempotencyKeyException ex) {
         return Status.ALREADY_EXISTS
+                .withDescription(ex.getMessage())
+                .asRuntimeException();
+    }
+
+    /**
+     * Maps AuthenticationException to UNAUTHENTICATED — no/bad/expired token.
+     * Reasoned, not yet IT-verified (see task-1.9).
+     */
+    @GrpcExceptionHandler(AuthenticationException.class)
+    public StatusRuntimeException handleAuthentication(AuthenticationException ex) {
+        return Status.UNAUTHENTICATED
+                .withDescription(ex.getMessage())
+                .asRuntimeException();
+    }
+
+    /** Maps AccessDeniedException to PERMISSION_DENIED — authenticated but wrong role. */
+    @GrpcExceptionHandler(AccessDeniedException.class)
+    public StatusRuntimeException handleAccessDenied(AccessDeniedException ex) {
+        return Status.PERMISSION_DENIED
                 .withDescription(ex.getMessage())
                 .asRuntimeException();
     }
