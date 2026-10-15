@@ -1,6 +1,7 @@
 package io.tradeflow.ledger.config;
 
 import io.tradeflow.ledger.exception.DuplicateIdempotencyKeyException;
+import io.tradeflow.ledger.exception.InvalidOrderEventException;
 import io.tradeflow.ledger.exception.ReservationNotFoundException;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
@@ -62,7 +63,7 @@ public class KafkaConsumerConfig {
      * Decides where a failed message goes: {@code order-events-dlt}, same key ({@code orderId}).
      * Called by the error handler; uses {@code dltKafkaTemplate} to do the actual send.
      *
-     * <p>{@code ANY_PARTITION}: let Kafka pick the DLT partition. Otherwise it copies the original
+     * <p>{@code ANY_PARTITION}: let Kafka pick the DLT partition. Otherwise, it copies the original
      * partition number, and the send fails if the DLT has fewer partitions.
      */
     @Bean
@@ -94,7 +95,8 @@ public class KafkaConsumerConfig {
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(deadLetterPublishingRecoverer, backOff);
         errorHandler.addNotRetryableExceptions(
                 ReservationNotFoundException.class,
-                DuplicateIdempotencyKeyException.class);
+                DuplicateIdempotencyKeyException.class,
+                InvalidOrderEventException.class);
         errorHandler.setCommitRecovered(true);
         return errorHandler;
     }

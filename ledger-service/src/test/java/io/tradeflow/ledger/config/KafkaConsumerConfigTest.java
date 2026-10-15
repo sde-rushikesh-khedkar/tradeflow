@@ -1,6 +1,7 @@
 package io.tradeflow.ledger.config;
 
 import io.tradeflow.ledger.exception.DuplicateIdempotencyKeyException;
+import io.tradeflow.ledger.exception.InvalidOrderEventException;
 import io.tradeflow.ledger.exception.ReservationNotFoundException;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -87,6 +88,14 @@ class KafkaConsumerConfigTest {
         @DisplayName("dead-letters DuplicateIdempotencyKeyException immediately without retrying")
         void deadLettersDuplicateKeyWithoutRetry() {
             handle(listenerFailure(new DuplicateIdempotencyKeyException("e-001")));
+
+            verify(recoverer).accept(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("dead-letters InvalidOrderEventException immediately without retrying")
+        void deadLettersInvalidEventWithoutRetry() {
+            handle(listenerFailure(new InvalidOrderEventException("e-003", "reservationId is missing")));
 
             verify(recoverer).accept(any(), any(), any());
         }
